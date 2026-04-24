@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWT From Scratch — Demo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d1a; color: #e0e0e0; font-family: 'Segoe UI', monospace; min-height: 100vh; }
+  .header { background: linear-gradient(135deg, #1a0a2e, #2d0a3a); padding: 16px 24px; border-bottom: 1px solid #c0006688; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #fff; }
+  .badge { background: #c00044; color: #fff; font-size: 0.65rem; padding: 3px 8px; border-radius: 3px; letter-spacing: 1px; }
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 0; height: calc(100vh - 57px); }
+  .sidebar { background: #12121f; border-right: 1px solid #ffffff15; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .main { overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .card { background: #1a1a2e; border: 1px solid #ffffff15; border-radius: 6px; overflow: hidden; }
+  .card-header { background: #ffffff08; padding: 10px 14px; font-size: 0.72rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: #888; border-bottom: 1px solid #ffffff10; }
+  .card-body { padding: 14px; }
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; font-size: 0.72rem; color: #888; margin-bottom: 5px; letter-spacing: 1px; text-transform: uppercase; }
+  input { width: 100%; background: #0d0d1a; border: 1px solid #ffffff20; border-radius: 4px; color: #e0e0e0; padding: 8px 10px; font-size: 0.85rem; outline: none; transition: border-color 0.2s; }
+  input:focus { border-color: #c00044; }
+  .btn { display: inline-block; padding: 8px 16px; border: none; border-radius: 4px; font-size: 0.8rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; width: 100%; margin-bottom: 6px; }
+  .btn-primary { background: #c00044; color: #fff; }
+  .btn-primary:hover { background: #e0005a; }
+  .btn-secondary { background: #ffffff12; color: #ccc; border: 1px solid #ffffff20; }
+  .btn-secondary:hover { background: #ffffff20; }
+  .btn-danger { background: #400010; color: #ff4466; border: 1px solid #ff446640; }
+  .btn-danger:hover { background: #600020; }
+  .btn-warning { background: #3a2000; color: #ffaa00; border: 1px solid #ffaa0040; }
+  .btn-warning:hover { background: #4a2a00; }
+  .token-box { background: #0d0d1a; border: 1px solid #ffffff15; border-radius: 4px; padding: 10px; font-size: 0.72rem; word-break: break-all; line-height: 1.5; }
+  .jwt-header { color: #ff6b6b; }
+  .jwt-payload { color: #4ecdc4; }
+  .jwt-sig { color: #ffe66d; }
+  .json-display { background: #0d0d1a; border: 1px solid #ffffff15; border-radius: 4px; padding: 12px; font-size: 0.78rem; line-height: 1.7; overflow-x: auto; }
+  .json-key { color: #4ecdc4; }
+  .json-val { color: #ffe66d; }
+  .json-str { color: #a8ff78; }
+  .json-num { color: #ff9f43; }
+  .alert { padding: 10px 14px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
+  .alert-danger { background: #3a001080; border: 1px solid #ff446660; color: #ff7799; }
+  .alert-warning { background: #3a200080; border: 1px solid #ffaa0060; color: #ffcc55; }
+  .alert-success { background: #00301080; border: 1px solid #44ff6660; color: #88ffaa; }
+  .alert-info { background: #001a3a80; border: 1px solid #4466ff60; color: #88aaff; }
+  .log-entry { padding: 8px 10px; border-bottom: 1px solid #ffffff08; font-size: 0.73rem; display: flex; gap: 8px; align-items: flex-start; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 2px; letter-spacing: 1px; white-space: nowrap; flex-shrink: 0; }
+  .badge-ok { background: #00301080; color: #88ffaa; border: 1px solid #44ff6640; }
+  .badge-alert { background: #3a200080; color: #ffcc55; border: 1px solid #ffaa0040; }
+  .badge-block { background: #3a001080; color: #ff7799; border: 1px solid #ff446640; }
+  .log-time { color: #555; flex-shrink: 0; }
+  .divider { border: none; border-top: 1px solid #ffffff10; margin: 8px 0; }
+  .score-bar { height: 6px; background: #ffffff10; border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .score-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
+  .version-chip { display: inline-flex; align-items: center; gap: 4px; background: #1a0a2e; border: 1px solid #c0006660; border-radius: 12px; padding: 3px 10px; font-size: 0.72rem; color: #ff88bb; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .status-online { background: #44ff66; box-shadow: 0 0 6px #44ff66; }
+  .status-offline { background: #555; }
+  #msg-area { position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
+  .toast { padding: 12px 16px; border-radius: 5px; font-size: 0.8rem; max-width: 320px; animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { transform: translateX(40px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #0d0d1a; } ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .hidden { display: none !important; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="status-dot status-offline" id="statusDot"></span>
+  <h1>JWT From Scratch</h1>
+  <span class="badge">HS256 • No Lib</span>
+  <span class="badge" id="versionChip" style="display:none; background:#1a0a2e; border:1px solid #c0006660; color:#ff88bb;">v0</span>
+  <span style="margin-left:auto; font-size:0.75rem; color:#555" id="usernameDisplay"></span>
+</div>
+
+<div class="layout">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <!-- Login / Register -->
+    <div class="card" id="loginCard">
+      <div class="card-header">Authentification</div>
+      <div class="card-body">
+        <div id="loginForm">
+          <div class="form-group"><label>Email</label><input id="email" type="email" value="jwttest@test.com" placeholder="email@example.com"></div>
+          <div class="form-group"><label>Mot de passe</label><input id="password" type="password" value="pass123"></div>
+          <button class="btn btn-primary" onclick="login()">Se connecter</button>
+          <hr class="divider">
+          <div class="form-group"><label>Username (register)</label><input id="regUsername" placeholder="username"></div>
+          <div class="form-group"><label>Rôle</label>
+            <select id="regRole" style="width:100%;background:#0d0d1a;border:1px solid #ffffff20;color:#e0e0e0;padding:8px;border-radius:4px;">
+              <option value="player">player</option><option value="referee">referee</option>
+              <option value="support">support</option><option value="admin">admin</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" onclick="register()">Créer un compte</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions (quand connecté) -->
+    <div class="card hidden" id="actionsCard">
+      <div class="card-header">Actions</div>
+      <div class="card-body">
+        <button class="btn btn-secondary" onclick="refreshTokens()">↻ Refresh tokens</button>
+        <button class="btn btn-warning" onclick="invalidateTokens()">⚠ Invalider tous les tokens</button>
+        <button class="btn btn-secondary" onclick="fetchMe()">👤 GET /auth/me</button>
+        <button class="btn btn-secondary" onclick="fetchLogs()">📋 Charger les logs</button>
+        <hr class="divider">
+        <button class="btn btn-danger" onclick="logout()">Déconnexion</button>
+      </div>
+    </div>
+
+    <!-- Refresh token brut -->
+    <div class="card hidden" id="rtCard">
+      <div class="card-header">Refresh Token (opaque)</div>
+      <div class="card-body">
+        <div class="token-box" id="rtDisplay" style="color:#888; font-size:0.68rem;"></div>
+        <div style="margin-top:8px; font-size:0.7rem; color:#555;">Stocké en DB (hash SHA-256). Jamais en clair.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- JWT raw + decoded -->
+    <div class="card hidden" id="jwtCard">
+      <div class="card-header">Access Token — Structure JWT</div>
+      <div class="card-body">
+        <div class="token-box" id="jwtRaw" style="margin-bottom:12px;"></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div>
+            <div style="font-size:0.7rem; color:#888; margin-bottom:6px; letter-spacing:1px;">HEADER</div>
+            <div class="json-display" id="jwtHeader"></div>
+          </div>
+          <div>
+            <div style="font-size:0.7rem; color:#888; margin-bottom:6px; letter-spacing:1px;">PAYLOAD</div>
+            <div class="json-display" id="jwtPayload"></div>
+          </div>
+        </div>
+        <div style="margin-top:10px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <span id="expTimer" style="font-size:0.75rem; color:#888;"></span>
+          <span class="version-chip" id="versionDisplay">version: 0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Alerte sécurité -->
+    <div class="hidden" id="securityAlertBox"></div>
+
+    <!-- /auth/me response -->
+    <div class="card hidden" id="meCard">
+      <div class="card-header">GET /auth/me — Payload vérifié côté serveur</div>
+      <div class="card-body">
+        <div class="json-display" id="meDisplay"></div>
+      </div>
+    </div>
+
+    <!-- Security Logs -->
+    <div class="card hidden" id="logsCard">
+      <div class="card-header">Logs Sécurité (scoring)</div>
+      <div class="card-body" id="logsDisplay" style="padding:0; max-height:300px; overflow-y:auto;"></div>
+    </div>
+
+    <!-- Device info -->
+    <div class="card">
+      <div class="card-header">Contexte Device (envoyé à chaque requête)</div>
+      <div class="card-body">
+        <div class="json-display" id="deviceDisplay"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="msg-area"></div>
+
+<script>
+const API = 'http://localhost:3000';
+let accessToken = localStorage.getItem('accessToken') || null;
+let refreshTokenVal = localStorage.getItem('refreshToken') || null;
+let deviceId = localStorage.getItem('deviceId') || (() => { const id = crypto.randomUUID(); localStorage.setItem('deviceId', id); return id; })();
+let timerInterval = null;
+
+function headers(withAuth = true) {
+  const h = { 'Content-Type': 'application/json', 'X-Device-ID': deviceId };
+  if (withAuth && accessToken) h['Authorization'] = `Bearer ${accessToken}`;
+  return h;
+}
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast alert-${type}`;
+  el.textContent = msg;
+  document.getElementById('msg-area').appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function b64decode(str) {
+  const pad = str.replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(atob(pad + '='.repeat((4 - pad.length % 4) % 4)));
+}
+
+function renderJson(obj) {
+  return JSON.stringify(obj, null, 2).replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+    .replace(/: "([^"]+)"/g, ': <span class="json-str">"$1"</span>')
+    .replace(/: (\d+)/g, ': <span class="json-num">$1</span>')
+    .replace(/: (true|false|null)/g, ': <span class="json-val">$1</span>');
+}
+
+function colorJwt(token) {
+  const [h, p, s] = token.split('.');
+  return `<span class="jwt-header">${h}</span>.<span class="jwt-payload">${p}</span>.<span class="jwt-sig">${s}</span>`;
+}
+
+function updateDeviceDisplay() {
+  document.getElementById('deviceDisplay').innerHTML = renderJson({
+    deviceId, userAgent: navigator.userAgent.substring(0, 80) + '...', ip: '(résolu côté serveur)'
+  });
+}
+
+function showLoggedIn(at, rt) {
+  accessToken = at;
+  refreshTokenVal = rt;
+  localStorage.setItem('accessToken', at);
+  localStorage.setItem('refreshToken', rt);
+
+  const [h, p] = at.split('.');
+  const header = b64decode(h);
+  const payload = b64decode(p);
+
+  document.getElementById('loginCard').classList.add('hidden');
+  document.getElementById('actionsCard').classList.remove('hidden');
+  document.getElementById('jwtCard').classList.remove('hidden');
+  document.getElementById('rtCard').classList.remove('hidden');
+  document.getElementById('statusDot').className = 'status-dot status-online';
+  document.getElementById('usernameDisplay').textContent = payload.username;
+
+  document.getElementById('jwtRaw').innerHTML = colorJwt(at);
+  document.getElementById('jwtHeader').innerHTML = renderJson(header);
+  document.getElementById('jwtPayload').innerHTML = renderJson(payload);
+  document.getElementById('rtDisplay').textContent = rt;
+
+  const v = payload.version ?? 0;
+  document.getElementById('versionDisplay').textContent = `version: ${v}`;
+  document.getElementById('versionChip').textContent = `v${v}`;
+  document.getElementById('versionChip').style.display = 'inline-flex';
+
+  startTimer(payload.exp);
+}
+
+function startTimer(exp) {
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    const remaining = exp - Math.floor(Date.now() / 1000);
+    const el = document.getElementById('expTimer');
+    if (remaining <= 0) { el.textContent = '⚠ Token expiré'; el.style.color = '#ff4466'; clearInterval(timerInterval); }
+    else { el.textContent = `Expire dans ${remaining}s`; el.style.color = remaining < 60 ? '#ffaa00' : '#888'; }
+  }, 1000);
+}
+
+function showLoggedOut() {
+  accessToken = null; refreshTokenVal = null;
+  localStorage.removeItem('accessToken'); localStorage.removeItem('refreshToken');
+  if (timerInterval) clearInterval(timerInterval);
+  ['jwtCard','rtCard','actionsCard','meCard','logsCard','securityAlertBox'].forEach(id => document.getElementById(id).classList.add('hidden'));
+  document.getElementById('loginCard').classList.remove('hidden');
+  document.getElementById('statusDot').className = 'status-dot status-offline';
+  document.getElementById('usernameDisplay').textContent = '';
+  document.getElementById('versionChip').style.display = 'none';
+}
+
+async function login() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  try {
+    const res = await fetch(`${API}/auth/login`, { method: 'POST', headers: headers(false), body: JSON.stringify({ email, password }) });
+    const data = await res.json();
+    if (!res.ok) { toast(data.message || 'Erreur login', 'danger'); return; }
+    showLoggedIn(data.accessToken, data.refreshToken);
+    toast('Connecté !', 'success');
+  } catch(e) { toast('Serveur inaccessible', 'danger'); }
+}
+
+async function register() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const username = document.getElementById('regUsername').value;
+  const role = document.getElementById('regRole').value;
+  try {
+    const res = await fetch(`${API}/auth/register`, { method: 'POST', headers: headers(false), body: JSON.stringify({ email, password, username, role }) });
+    const data = await res.json();
+    if (!res.ok) { toast((data.message || ['Erreur']).toString(), 'danger'); return; }
+    toast(`Compte créé : ${data.username}`, 'success');
+  } catch(e) { toast('Serveur inaccessible', 'danger'); }
+}
+
+async function refreshTokens() {
+  if (!refreshTokenVal) { toast('Pas de refresh token', 'warning'); return; }
+  try {
+    const res = await fetch(`${API}/auth/refresh`, { method: 'POST', headers: headers(false), body: JSON.stringify({ refreshToken: refreshTokenVal }) });
+    const data = await res.json();
+    if (!res.ok) { toast(data.message || 'Refresh échoué', 'danger'); showLoggedOut(); return; }
+    showLoggedIn(data.accessToken, data.refreshToken);
+    if (data.securityAlert) showSecurityAlert(data.securityAlert, 'warning');
+    toast('Tokens rafraîchis', 'success');
+  } catch(e) { toast('Erreur réseau', 'danger'); }
+}
+
+async function invalidateTokens() {
+  try {
+    const res = await fetch(`${API}/auth/invalidate-tokens`, { method: 'POST', headers: headers() });
+    const data = await res.json();
+    if (!res.ok) { toast(data.message, 'danger'); return; }
+    toast('Tokens invalidés — le prochain refresh sera refusé', 'warning');
+  } catch(e) { toast('Erreur', 'danger'); }
+}
+
+async function logout() {
+  if (refreshTokenVal) {
+    await fetch(`${API}/auth/logout`, { method: 'POST', headers: headers(false), body: JSON.stringify({ refreshToken: refreshTokenVal }) }).catch(() => {});
+  }
+  showLoggedOut();
+  toast('Déconnecté', 'info');
+}
+
+async function fetchMe() {
+  try {
+    const res = await fetch(`${API}/auth/me`, { headers: headers() });
+    const data = await res.json();
+    if (!res.ok) { toast(data.message, 'danger'); return; }
+    document.getElementById('meCard').classList.remove('hidden');
+    document.getElementById('meDisplay').innerHTML = renderJson(data);
+  } catch(e) { toast('Erreur', 'danger'); }
+}
+
+async function fetchLogs() {
+  try {
+    const res = await fetch(`${API}/auth/security/logs`, { headers: headers() });
+    const data = await res.json();
+    if (!res.ok) { toast(data.message, 'danger'); return; }
+    renderLogs(data);
+  } catch(e) { toast('Erreur', 'danger'); }
+}
+
+function renderLogs(logs) {
+  const card = document.getElementById('logsCard');
+  const container = document.getElementById('logsDisplay');
+  card.classList.remove('hidden');
+  if (!logs.length) { container.innerHTML = '<div style="padding:12px;color:#555;font-size:0.8rem;">Aucun log</div>'; return; }
+  container.innerHTML = [...logs].reverse().map(l => {
+    const badgeClass = l.level === 'block' ? 'badge-block' : l.level === 'alert' ? 'badge-alert' : 'badge-ok';
+    const time = new Date(l.timestamp).toLocaleTimeString();
+    const details = Object.keys(l.details).length ? JSON.stringify(l.details, null, 0).substring(0, 80) : '';
+    const scoreColor = l.score > 80 ? '#ff4466' : l.score >= 50 ? '#ffaa00' : '#44ff66';
+    return `<div class="log-entry">
+      <span class="log-badge ${badgeClass}">${l.level.toUpperCase()}</span>
+      <span class="log-time">${time}</span>
+      <span style="color:#888; flex:1;">${l.event} <span style="color:${scoreColor}">score=${l.score}</span></span>
+      ${details ? `<span style="color:#555;font-size:0.68rem;word-break:break-all;">${details}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function showSecurityAlert(msg, type) {
+  const box = document.getElementById('securityAlertBox');
+  box.classList.remove('hidden');
+  box.innerHTML = `<div class="alert alert-${type}">⚠ ${msg}</div>`;
+  setTimeout(() => box.classList.add('hidden'), 8000);
+}
+
+// Init
+updateDeviceDisplay();
+if (accessToken && refreshTokenVal) {
+  try { showLoggedIn(accessToken, refreshTokenVal); } catch(e) { showLoggedOut(); }
+}
+</script>
+</body>
+</html>

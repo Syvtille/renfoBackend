@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Bash(npx:*)",
+      "Bash(npm install:*)",
+      "Bash(timeout 8 npm run:*)",
+      "Bash(npm run:*)",
+      "Bash(npm test:*)",
+      "PowerShell(python -c $script)",
+      "PowerShell(Get-Item *)",
+      "PowerShell(python \"graphify-out\\\\_ast_extract.py\")",
+      "PowerShell(python \"graphify-out\\\\_cache_check.py\")",
+      "PowerShell(python \"graphify-out\\\\_merge_semantic.py\")",
+      "PowerShell(python \"graphify-out\\\\_merge_final.py\")",
+      "PowerShell(python \"graphify-out\\\\_build_graph.py\")",
+      "PowerShell(python \"graphify-out\\\\_label_communities.py\")",
+      "PowerShell(python \"graphify-out\\\\_gen_html.py\")",
+      "PowerShell(python \"graphify-out\\\\_benchmark.py\")",
+      "PowerShell(python \"graphify-out\\\\_save_manifest.py\")"
+    ]
+  }
+}

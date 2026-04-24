@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClashChat — Test Paiements</title>
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+
+    /* ── Layout ───────────────────────────────────────── */
+    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+
+    /* ── Sidebar ──────────────────────────────────────── */
+    .sidebar { background: #1e293b; border-right: 1px solid #334155; padding: 1.25rem 0; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+    .sidebar-title { padding: 0 1.25rem 1.25rem; font-size: 1rem; font-weight: 700; color: #818cf8; border-bottom: 1px solid #334155; margin-bottom: .5rem; }
+    .nav-step { display: flex; align-items: center; gap: .65rem; padding: .6rem 1.25rem; cursor: pointer; transition: background .15s; border-left: 3px solid transparent; font-size: .85rem; }
+    .nav-step:hover { background: #0f172a; }
+    .nav-step.active { background: #0f172a; border-left-color: #6366f1; color: #a5b4fc; }
+    .nav-step.done .step-num { background: #16a34a; }
+    .step-num { width: 22px; height: 22px; border-radius: 50%; background: #334155; display: flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; flex-shrink: 0; }
+    .nav-step.active .step-num { background: #6366f1; }
+
+    /* ── Status bar ───────────────────────────────────── */
+    .status-bar { display: flex; align-items: center; gap: .6rem; padding: .6rem 1rem; background: #1e293b; border-bottom: 1px solid #334155; font-size: .82rem; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; flex-shrink: 0; }
+    .status-dot.on { background: #4ade80; }
+    #status-text { color: #94a3b8; }
+    #status-text b { color: #e2e8f0; }
+
+    /* ── Main ─────────────────────────────────────────── */
+    .main-wrap { display: flex; flex-direction: column; }
+    .main { padding: 1.75rem 2rem 2rem; max-width: 780px; flex: 1; }
+    .page { display: none; }
+    .page.active { display: block; }
+    h1 { font-size: 1.3rem; font-weight: 700; color: #a5b4fc; margin-bottom: .25rem; }
+    .subtitle { color: #64748b; font-size: .85rem; margin-bottom: 1.5rem; }
+
+    /* ── Cards ────────────────────────────────────────── */
+    .card { background: #1e293b; border-radius: 10px; padding: 1.25rem; border: 1px solid #334155; margin-bottom: 1.1rem; }
+    .card-title { font-size: .9rem; font-weight: 600; color: #a5b4fc; margin-bottom: 1rem; }
+
+    /* ── Form ─────────────────────────────────────────── */
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; }
+    .field { margin-bottom: .8rem; }
+    label { display: block; margin-bottom: .3rem; font-size: .8rem; color: #94a3b8; font-weight: 500; }
+    input, select { width: 100%; padding: .5rem .75rem; border-radius: 7px; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: .88rem; }
+    input:focus, select:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.2); }
+
+    /* ── Buttons ──────────────────────────────────────── */
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; padding: .55rem 1.1rem; border-radius: 7px; border: none; cursor: pointer; font-size: .88rem; font-weight: 600; transition: all .15s; white-space: nowrap; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-primary  { background: #6366f1; color: white; }
+    .btn-primary:hover:not(:disabled)  { background: #4f46e5; }
+    .btn-secondary { background: #334155; color: #e2e8f0; }
+    .btn-secondary:hover:not(:disabled) { background: #475569; }
+    .btn-danger   { background: #dc2626; color: white; }
+    .btn-danger:hover:not(:disabled)   { background: #b91c1c; }
+    .btn-full { width: 100%; }
+    .btn-row { display: flex; gap: .6rem; margin-bottom: .8rem; }
+
+    /* ── Tabs ─────────────────────────────────────────── */
+    .tabs { display: flex; gap: .4rem; margin-bottom: 1.1rem; }
+    .tab { padding: .45rem .9rem; border-radius: 7px; cursor: pointer; font-size: .83rem; font-weight: 500; color: #64748b; background: #1e293b; border: 1px solid #334155; transition: all .15s; }
+    .tab.active { background: #6366f1; color: white; border-color: #6366f1; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Inline result box ────────────────────────────── */
+    .result-box { border-radius: 7px; padding: .7rem .9rem; font-size: .82rem; font-family: monospace; line-height: 1.6; margin-top: .75rem; display: none; word-break: break-all; }
+    .result-box.ok  { background: #052e16; border: 1px solid #166534; color: #4ade80; display: block; }
+    .result-box.err { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; display: block; }
+    .result-box.info { background: #0c1a2e; border: 1px solid #1e3a5f; color: #93c5fd; display: block; }
+
+    /* ── Toast system ─────────────────────────────────── */
+    #toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: .5rem; pointer-events: none; }
+    .toast { padding: .75rem 1.1rem; border-radius: 8px; font-size: .85rem; font-weight: 500; max-width: 380px; box-shadow: 0 4px 16px rgba(0,0,0,.4); pointer-events: none; animation: slideIn .2s ease; }
+    .toast.ok  { background: #052e16; border: 1px solid #166534; color: #4ade80; }
+    .toast.err { background: #450a0a; border: 1px solid #7f1d1d; color: #fca5a5; }
+    .toast.info { background: #0c1a2e; border: 1px solid #1e3a5f; color: #93c5fd; }
+    .toast.warn { background: #1c1000; border: 1px solid #713f12; color: #fde68a; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes fadeOut { to { opacity: 0; transform: translateX(20px); } }
+
+    /* ── Stripe elements ──────────────────────────────── */
+    #payment-element, #sub-payment-element { min-height: 60px; margin: .75rem 0; }
+
+    /* ── Data display ─────────────────────────────────── */
+    .data-box { background: #0f172a; border: 1px solid #1e293b; border-radius: 7px; padding: .6rem .85rem; font-family: monospace; font-size: .8rem; color: #a5b4fc; word-break: break-all; min-height: 2rem; }
+    .data-box:empty::before { content: '—'; color: #334155; }
+
+    /* ── List ─────────────────────────────────────────── */
+    .item-list { list-style: none; }
+    .item-list li { padding: .55rem 0; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; font-size: .84rem; gap: .5rem; }
+    .item-list li:last-child { border-bottom: none; }
+    .item-list a { color: #818cf8; text-decoration: none; font-size: .8rem; white-space: nowrap; }
+    .item-list a:hover { text-decoration: underline; }
+
+    /* ── Badges ───────────────────────────────────────── */
+    .badge { padding: .18rem .55rem; border-radius: 9999px; font-size: .7rem; font-weight: 600; white-space: nowrap; }
+    .badge-green  { background: #14532d; color: #4ade80; }
+    .badge-red    { background: #7f1d1d; color: #fca5a5; }
+    .badge-yellow { background: #713f12; color: #fde68a; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+
+    /* ── Test cards ───────────────────────────────────── */
+    .test-cards { display: grid; grid-template-columns: repeat(3,1fr); gap: .65rem; }
+    .test-card { background: #0f172a; border: 1px solid #334155; border-radius: 7px; padding: .65rem; text-align: center; cursor: pointer; transition: border-color .15s; }
+    .test-card:hover { border-color: #6366f1; }
+    .test-card .num { font-family: monospace; font-size: .8rem; color: #e2e8f0; margin-bottom: .2rem; }
+    .test-card .label { font-size: .7rem; color: #64748b; }
+
+    /* ── Sub info ─────────────────────────────────────── */
+    .sub-info { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem 1.25rem; }
+    .sub-info-item label { font-size: .75rem; color: #64748b; margin-bottom: .15rem; }
+    .sub-info-item span { font-size: .88rem; font-weight: 500; }
+
+    .separator { border: none; border-top: 1px solid #1e293b; margin: .9rem 0; }
+    .hidden { display: none !important; }
+    .text-sm { font-size: .8rem; color: #64748b; }
+    .mt-sm { margin-top: .5rem; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.3); border-top-color: white; border-radius: 50%; animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-title">ClashChat Payments</div>
+    <div class="nav-step active" onclick="goTo(0)" id="nav-0"><div class="step-num">1</div>Inscription / Connexion</div>
+    <div class="nav-step" onclick="goTo(1)" id="nav-1"><div class="step-num">2</div>Customer Stripe</div>
+    <div class="nav-step" onclick="goTo(2)" id="nav-2"><div class="step-num">3</div>Produit One-Shot</div>
+    <div class="nav-step" onclick="goTo(3)" id="nav-3"><div class="step-num">4</div>Abonnement Pro</div>
+    <div class="nav-step" onclick="goTo(4)" id="nav-4"><div class="step-num">5</div>Gérer l'abonnement</div>
+    <div class="nav-step" onclick="goTo(5)" id="nav-5"><div class="step-num">6</div>Factures &amp; Historique</div>
+  </nav>
+
+  <div class="main-wrap">
+    <!-- Status bar -->
+    <div class="status-bar">
+      <div class="status-dot" id="status-dot"></div>
+      <div id="status-text">Non connecté — commence par l'étape 1</div>
+    </div>
+
+    <div class="main">
+
+      <!-- ═══════════════════════════════════════════════
+           PAGE 0 : Auth
+      ════════════════════════════════════════════════ -->
+      <div class="page active" id="page-0">
+        <h1>Inscription &amp; Connexion</h1>
+        <p class="subtitle">Crée un compte <strong>admin</strong> pour pouvoir tout tester (création de produits, etc.)</p>
+
+        <div class="tabs" id="auth-tabs">
+          <div class="tab active" id="tab-btn-register" onclick="switchAuthTab('register')">Inscription</div>
+          <div class="tab" id="tab-btn-login" onclick="switchAuthTab('login')">Connexion</div>
+        </div>
+
+        <!-- Register -->
+        <div class="tab-content active" id="tab-register">
+          <div class="card">
+            <div class="card-title">Créer un nouveau compte</div>
+            <div class="form-row">
+              <div class="field"><label>Email</label><input id="reg-email" value="admin@clashchat.com" /></div>
+              <div class="field"><label>Username</label><input id="reg-username" value="admintest" /></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label>Mot de passe (min 6 chars)</label><input id="reg-password" type="password" value="password123" /></div>
+              <div class="field">
+                <label>Rôle</label>
+                <select id="reg-role">
+                  <option value="admin">admin (recommandé pour tester)</option>
+                  <option value="player">player</option>
+                  <option value="referee">referee</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-full" id="btn-register" onclick="register()">Créer le compte</button>
+            <div id="result-register" class="result-box"></div>
+          </div>
+        </div>
+
+        <!-- Login -->
+        <div class="tab-content" id="tab-login">
+          <div class="card">
+            <div class="card-title">Se connecter</div>
+            <div class="form-row">
+              <div class="field"><label>Email</label><input id="login-email" value="admin@clashchat.com" /></div>
+              <div class="field"><label>Mot de passe</label><input id="login-password" type="password" value="password123" /></div>
+            </div>
+            <button class="btn btn-primary btn-full" id="btn-login" onclick="login()">Se connecter</button>
+            <div id="result-login" class="result-box"></div>
+          </div>
+        </div>
+
+        <!-- Session info -->
+        <div class="card" id="session-card" style="display:none">
+          <div class="card-title">Session active</div>
+          <div class="form-row">
+            <div class="field"><label>User ID</label><div class="data-box" id="display-userid"></div></div>
+            <div class="field"><label>Username</label><div class="data-box" id="display-username"></div></div>
+          </div>
+          <div class="field"><label>JWT (extrait)</label><div class="data-box" id="display-token"></div></div>
+          <button class="btn btn-secondary" onclick="goTo(1)" style="margin-top:.5rem">→ Étape 2 : Customer Stripe</button>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           PAGE 1 : Customer Stripe
+      ════════════════════════════════════════════════ -->
+      <div class="page" id="page-1">
+        <h1>Customer Stripe</h1>
+        <p class="subtitle">Associe ton compte à un Customer Stripe pour les paiements.</p>
+        <div class="card">
+          <div class="card-title">Créer un Customer Stripe</div>
+          <div class="form-row">
+            <div class="field"><label>Email</label><input id="cust-email" /></div>
+            <div class="field"><label>Nom</label><input id="cust-name" /></div>
+          </div>
+          <button class="btn btn-primary btn-full" id="btn-create-cust" onclick="createCustomer()">Créer le Customer</button>
+          <div id="result-customer" class="result-box"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Customer ID (utilisé pour tous les paiements)</div>
+          <div class="field">
+            <label>Customer ID Stripe (auto-rempli)</label>
+            <input id="customer-id" placeholder="cus_... (apparaît automatiquement après création)" />
+          </div>
+          <button class="btn btn-secondary" onclick="goTo(2)">→ Étape 3 : Produit One-Shot</button>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           PAGE 2 : One-shot
+      ════════════════════════════════════════════════ -->
+      <div class="page" id="page-2">
+        <h1>Produit One-Shot</h1>
+        <p class="subtitle">Achète le "Premium Topic Pack" — paiement unique, pas d'abonnement.</p>
+
+        <div class="card">
+          <div class="card-title">1. Créer un produit (rôle admin)</div>
+          <div class="form-row">
+            <div class="field"><label>Nom</label><input id="prod-name" value="Premium Topic Pack" /></div>
+            <div class="field"><label>Prix (centimes, ex: 999 = 9,99€)</label><input id="prod-price" type="number" value="999" /></div>
+          </div>
+          <div class="field"><label>Description</label><input id="prod-desc" value="Accès à 50 topics premium de débat" /></div>
+          <button class="btn btn-primary btn-full" id="btn-create-prod" onclick="createProduct()">Créer le produit sur Stripe</button>
+          <div id="result-create-prod" class="result-box"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">2. Acheter un produit</div>
+          <div class="btn-row">
+            <button class="btn btn-secondary" onclick="loadProducts()">Rafraîchir la liste</button>
+          </div>
+          <div class="field">
+            <label>Produit disponible</label>
+            <select id="product-select"><option value="">— Clique "Rafraîchir" d'abord —</option></select>
+          </div>
+          <div class="card-title" style="margin-top:1rem">Adresse de facturation</div>
+          <div class="form-row">
+            <div class="field"><label>Nom complet</label><input id="billing-name" placeholder="Jean Dupont" /></div>
+            <div class="field"><label>Email</label><input id="billing-email" type="email" placeholder="jean@exemple.fr" /></div>
+          </div>
+          <div class="field"><label>Adresse ligne 1</label><input id="billing-line1" placeholder="1 rue de la Paix" /></div>
+          <div class="field"><label>Adresse ligne 2 (optionnel)</label><input id="billing-line2" placeholder="Appartement 4B" /></div>
+          <div class="form-row">
+            <div class="field"><label>Ville</label><input id="billing-city" placeholder="Paris" /></div>
+            <div class="field"><label>Code postal</label><input id="billing-postal" placeholder="75001" /></div>
+            <div class="field"><label>Pays (2 lettres)</label><input id="billing-country" placeholder="FR" maxlength="2" style="text-transform:uppercase" /></div>
+          </div>
+          <button class="btn btn-primary btn-full" id="btn-purchase" onclick="purchaseProduct()">Initier l'achat</button>
+          <div id="result-purchase" class="result-box"></div>
+          <div id="payment-element"></div>
+          <button id="btn-confirm-pay" class="btn btn-primary btn-full hidden" onclick="confirmPayment()">Confirmer le paiement</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Cartes de test Stripe (clique pour copier)</div>
+          <div class="test-cards">
+            <div class="test-card" onclick="copyCard('4242424242424242')">
+              <div class="num">4242 4242 4242 4242</div><div class="label">Paiement réussi</div>
+            </div>
+            <div class="test-card" onclick="copyCard('4000000000000002')">
+              <div class="num">4000 0000 0000 0002</div><div class="label">Carte refusée</div>
+            </div>
+            <div class="test-card" onclick="copyCard('4000002500003155')">
+              <div class="num">4000 0025 0000 3155</div><div class="label">3D Secure</div>
+            </div>
+          </div>
+          <p class="text-sm mt-sm">Date : n'importe quelle date future · CVV : 3 chiffres quelconques · CP : 5 chiffres</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           PAGE 3 : Subscription
+      ════════════════════════════════════════════════ -->
+      <div class="page" id="page-3">
+        <h1>Abonnement ClashChat Pro</h1>
+        <p class="subtitle">14 jours d'essai gratuit · Codes promo · Formulaire de paiement custom Stripe.</p>
+
+        <div class="card">
+          <div class="card-title">Souscrire</div>
+          <div class="form-row">
+            <div class="field">
+              <label>Plan</label>
+              <select id="sub-plan">
+                <option value="month">Mensuel</option>
+                <option value="year">Annuel</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Code promo (optionnel)</label>
+              <input id="promo-code" placeholder="ex: CLASH50" />
+            </div>
+          </div>
+          <button class="btn btn-primary btn-full" id="btn-subscribe" onclick="subscribe()">Souscrire avec 14j d'essai gratuit</button>
+          <div id="result-subscribe" class="result-box"></div>
+          <div id="sub-payment-element"></div>
+          <button id="btn-confirm-sub" class="btn btn-primary btn-full hidden" onclick="confirmSubscription()">Confirmer le paiement</button>
+          <p class="text-sm mt-sm">Si l'essai est actif → aucune carte demandée immédiatement.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Cartes de test</div>
+          <div class="test-cards">
+            <div class="test-card" onclick="copyCard('4242424242424242')"><div class="num">4242 4242 4242 4242</div><div class="label">Réussi</div></div>
+            <div class="test-card" onclick="copyCard('4000000000000002')"><div class="num">4000 0000 0000 0002</div><div class="label">Refusée</div></div>
+            <div class="test-card" onclick="copyCard('4000002500003155')"><div class="num">4000 0025 0000 3155</div><div class="label">3D Secure</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           PAGE 4 : Manage
+      ════════════════════════════════════════════════ -->
+      <div class="page" id="page-4">
+        <h1>Gérer l'abonnement</h1>
+        <p class="subtitle">Consulte, change de plan ou annule.</p>
+
+        <div class="card">
+          <div class="card-title">Mon abonnement</div>
+          <button class="btn btn-secondary" id="btn-get-sub" onclick="getSubscription()">Rafraîchir</button>
+          <div id="result-getsub" class="result-box" style="margin-top:.75rem"></div>
+          <div id="sub-display" style="margin-top:.75rem"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Changer de plan</div>
+          <div class="form-row">
+            <div class="field">
+              <label>Nouveau plan</label>
+              <select id="change-plan-select"><option value="month">Mensuel</option><option value="year">Annuel</option></select>
+            </div>
+            <div class="field" style="display:flex;align-items:flex-end">
+              <button class="btn btn-primary btn-full" onclick="changePlan()">Changer de plan</button>
+            </div>
+          </div>
+          <div id="result-changeplan" class="result-box"></div>
+          <p class="text-sm">Le prorata est calculé automatiquement par Stripe.</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Annuler l'abonnement</div>
+          <p class="text-sm" style="margin-bottom:.9rem">L'abonnement reste actif jusqu'à la fin de la période. Il ne sera pas renouvelé.</p>
+          <button class="btn btn-danger" onclick="cancelSub()">Annuler à la fin de la période</button>
+          <div id="result-cancel" class="result-box"></div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           PAGE 5 : Invoices
+      ════════════════════════════════════════════════ -->
+      <div class="page" id="page-5">
+        <h1>Factures &amp; Historique</h1>
+        <p class="subtitle">Consulte tes factures et télécharge les PDFs.</p>
+
+        <div class="card">
+          <div class="card-title">Mes factures Stripe</div>
+          <button class="btn btn-secondary" onclick="loadInvoices()">Charger les factures</button>
+          <div id="result-invoices" class="result-box"></div>
+          <ul id="invoices-list" class="item-list" style="margin-top:.75rem"></ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Historique paiements one-shot</div>
+          <button class="btn btn-secondary" onclick="loadHistory()">Charger l'historique</button>
+          <div id="result-history" class="result-box"></div>
+          <ul id="history-list" class="item-list" style="margin-top:.75rem"></ul>
+        </div>
+      </div>
+
+    </div><!-- /main -->
+  </div><!-- /main-wrap -->
+</div><!-- /layout -->
+
+<script>
+  const API = 'http://localhost:3000';
+  const STRIPE_PK = 'pk_test_51THgpODyBcwcLmiMFdHtYiaZht3BqrE9tE5BSufpUiCNPaK3o29AFGkzbN7nZr8Rx9YIR2vLT0kmxTjDdia4Bj3E00spi0FFqB';
+
+  let token = '';
+  let userId = '';
+  let stripe = Stripe(STRIPE_PK);
+  let elements, paymentElement, subElements, subPaymentElement;
+
+  // ── Toast ──────────────────────────────────────────────────────────────
+  function toast(msg, type = 'info', duration = 4000) {
+    const container = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(() => {
+      el.style.animation = 'fadeOut .3s ease forwards';
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+
+  // ── Result boxes ───────────────────────────────────────────────────────
+  function showResult(id, msg, type = 'ok') {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = `result-box ${type}`;
+    el.textContent = msg;
+  }
+  function clearResult(id) {
+    const el = document.getElementById(id);
+    if (el) { el.className = 'result-box'; el.textContent = ''; }
+  }
+
+  // ── Loading state ──────────────────────────────────────────────────────
+  function setLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    if (loading) {
+      btn._text = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner"></span> En cours...';
+      btn.disabled = true;
+    } else {
+      btn.innerHTML = btn._text || btn.innerHTML;
+      btn.disabled = false;
+    }
+  }
+
+  // ── Navigation ─────────────────────────────────────────────────────────
+  function goTo(n) {
+    document.querySelectorAll('.page').forEach((p, i) => p.classList.toggle('active', i === n));
+    for (let i = 0; i < 6; i++) document.getElementById('nav-' + i)?.classList.toggle('active', i === n);
+  }
+
+  function switchAuthTab(name) {
+    ['register', 'login'].forEach(t => {
+      document.getElementById('tab-' + t)?.classList.toggle('active', t === name);
+      document.getElementById('tab-btn-' + t)?.classList.toggle('active', t === name);
+    });
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  function headers() {
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+  }
+
+  function parseJwt(t) {
+    try { return JSON.parse(atob(t.split('.')[1])); } catch { return {}; }
+  }
+
+  function markDone(n) {
+    document.getElementById('nav-' + n)?.classList.add('done');
+  }
+
+  function updateStatusBar() {
+    document.getElementById('status-dot').classList.toggle('on', !!token);
+    const payload = parseJwt(token);
+    document.getElementById('status-text').innerHTML = token
+      ? `Connecté — <b>${payload.username ?? userId}</b> · <span style="color:#64748b;font-size:.8rem">${userId}</span>`
+      : 'Non connecté — commence par l\'étape 1';
+  }
+
+  async function apiCall(method, path, body, resultId) {
+    const url = `${API}${path}`;
+    if (resultId) clearResult(resultId);
+    let res;
+    try {
+      const opts = { method, headers: headers() };
+      if (body) opts.body = JSON.stringify(body);
+      res = await fetch(url, opts);
+    } catch (e) {
+      const msg = 'Serveur inaccessible sur localhost:3000 — lance: npm run start:dev';
+      if (resultId) showResult(resultId, msg, 'err');
+      toast(msg, 'err', 6000);
+      throw e;
+    }
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      const msg = `Réponse non-JSON du serveur (HTTP ${res.status})`;
+      if (resultId) showResult(resultId, msg, 'err');
+      toast(msg, 'err');
+      throw new Error(msg);
+    }
+
+    if (!res.ok) {
+      const msg = data.message
+        ? (Array.isArray(data.message) ? data.message.join(', ') : data.message)
+        : JSON.stringify(data);
+      if (resultId) showResult(resultId, `✗ ${msg}`, 'err');
+      toast('Erreur : ' + msg, 'err');
+      throw new Error(msg);
+    }
+
+    return data;
+  }
+
+  function statusBadge(status) {
+    const map = { succeeded: 'badge-green', active: 'badge-green', trialing: 'badge-blue', paid: 'badge-green', failed: 'badge-red', canceled: 'badge-red', past_due: 'badge-yellow', open: 'badge-yellow', pending: 'badge-yellow' };
+    return `<span class="badge ${map[status] || 'badge-blue'}">${status}</span>`;
+  }
+
+  function copyCard(num) {
+    navigator.clipboard.writeText(num).then(() => toast(`Carte copiée : ${num}`, 'info'));
+  }
+
+  // ── AUTH ───────────────────────────────────────────────────────────────
+  async function register() {
+    setLoading('btn-register', true);
+    try {
+      const email    = document.getElementById('reg-email').value.trim();
+      const username = document.getElementById('reg-username').value.trim();
+      const password = document.getElementById('reg-password').value;
+      const role     = document.getElementById('reg-role').value;
+
+      const res = await fetch(`${API}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, username, password, role }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg = Array.isArray(data.message) ? data.message.join(', ') : (data.message ?? JSON.stringify(data));
+        showResult('result-register', '✗ ' + msg, 'err');
+        toast('Erreur inscription : ' + msg, 'err');
+        return;
+      }
+
+      showResult('result-register', `✓ Compte créé : ${data.username} (${data.email}) — connexion automatique...`, 'ok');
+      toast(`Compte créé pour ${data.username} !`, 'ok');
+
+      // auto-login
+      document.getElementById('login-email').value = email;
+      document.getElementById('login-password').value = password;
+      await doLogin(email, password);
+    } catch (e) {
+      if (e.message === 'Failed to fetch') {
+        showResult('result-register', 'Serveur inaccessible. Lance: npm run start:dev', 'err');
+        toast('Serveur inaccessible sur localhost:3000', 'err', 6000);
+      }
+    } finally {
+      setLoading('btn-register', false);
+    }
+  }
+
+  async function login() {
+    setLoading('btn-login', true);
+    try {
+      const email    = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      await doLogin(email, password);
+    } finally {
+      setLoading('btn-login', false);
+    }
+  }
+
+  async function doLogin(email, password) {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+
+    const jwt = data.access_token ?? data.accessToken;
+    if (!jwt) {
+      const msg = Array.isArray(data.message) ? data.message.join(', ') : (data.message ?? 'Login échoué');
+      showResult('result-login', '✗ ' + msg, 'err');
+      toast('Login échoué : ' + msg, 'err');
+      return;
+    }
+
+    token = jwt;
+    const payload = parseJwt(token);
+    userId = payload.sub ?? '';
+
+    showResult('result-login', `✓ Connecté en tant que ${payload.username} (${email})`, 'ok');
+    showResult('result-register', `✓ Connecté en tant que ${payload.username}`, 'ok');
+
+    document.getElementById('display-userid').textContent   = userId;
+    document.getElementById('display-username').textContent = payload.username ?? '';
+    document.getElementById('display-token').textContent    = token.slice(0, 80) + '...';
+    document.getElementById('session-card').style.display   = 'block';
+
+    // Pre-fill customer fields
+    document.getElementById('cust-email').value = email;
+    document.getElementById('cust-name').value  = payload.username ?? email;
+
+    updateStatusBar();
+    markDone(0);
+    toast(`Connecté ! Bienvenue ${payload.username}`, 'ok');
+  }
+
+  // ── CUSTOMER ───────────────────────────────────────────────────────────
+  async function createCustomer() {
+    setLoading('btn-create-cust', true);
+    try {
+      const email = document.getElementById('cust-email').value.trim();
+      const name  = document.getElementById('cust-name').value.trim();
+      const data = await apiCall('POST', '/payments/customers', { email, name }, 'result-customer');
+      const customerId = data.customerId;
+      document.getElementById('customer-id').value = customerId;
+      showResult('result-customer', `✓ Customer créé : ${customerId}`, 'ok');
+      toast('Customer Stripe créé !', 'ok');
+      markDone(1);
+    } catch (e) {
+      showResult('result-customer', '✗ ' + e.message, 'err');
+    } finally { setLoading('btn-create-cust', false); }
+  }
+
+  // ── PRODUCTS ───────────────────────────────────────────────────────────
+  async function createProduct() {
+    setLoading('btn-create-prod', true);
+    try {
+      const data = await apiCall('POST', '/payments/products', {
+        name: document.getElementById('prod-name').value,
+        description: document.getElementById('prod-desc').value,
+        priceInCents: parseInt(document.getElementById('prod-price').value),
+      }, 'result-create-prod');
+      showResult('result-create-prod', `✓ Produit créé : "${data.name}" | ${(data.priceInCents/100).toFixed(2)}€ | Stripe: ${data.stripeProductId}`, 'ok');
+      toast(`Produit "${data.name}" créé !`, 'ok');
+      await loadProducts();
+    } catch (e) {
+      showResult('result-create-prod', '✗ ' + e.message, 'err');
+    } finally { setLoading('btn-create-prod', false); }
+  }
+
+  async function loadProducts() {
+    try {
+      const products = await apiCall('GET', '/payments/products', null, 'result-purchase');
+      const select = document.getElementById('product-select');
+      if (!products.length) { select.innerHTML = '<option value="">Aucun produit disponible</option>'; return; }
+      select.innerHTML = products.map(p =>
+        `<option value="${p.id}">${p.name} — ${(p.priceInCents/100).toFixed(2)}€</option>`
+      ).join('');
+      clearResult('result-purchase');
+      toast(`${products.length} produit(s) chargé(s)`, 'info');
+    } catch {}
+  }
+
+  async function purchaseProduct() {
+    const productId  = document.getElementById('product-select').value;
+    const customerId = document.getElementById('customer-id').value.trim();
+    if (!productId)  { showResult('result-purchase', '✗ Sélectionne un produit d\'abord', 'err'); return; }
+    if (!customerId) { showResult('result-purchase', '✗ Crée d\'abord un Customer Stripe (étape 2)', 'err'); return; }
+
+    const billingName    = document.getElementById('billing-name').value.trim();
+    const billingEmail   = document.getElementById('billing-email').value.trim();
+    const billingLine1   = document.getElementById('billing-line1').value.trim();
+    const billingLine2   = document.getElementById('billing-line2').value.trim() || undefined;
+    const billingCity    = document.getElementById('billing-city').value.trim();
+    const billingPostal  = document.getElementById('billing-postal').value.trim();
+    const billingCountry = document.getElementById('billing-country').value.trim().toUpperCase();
+    if (!billingName || !billingEmail || !billingLine1 || !billingCity || !billingPostal || !billingCountry) {
+      showResult('result-purchase', '✗ Remplis tous les champs de facturation obligatoires', 'err'); return;
+    }
+
+    const billing = { name: billingName, email: billingEmail, line1: billingLine1, line2: billingLine2, city: billingCity, postalCode: billingPostal, country: billingCountry };
+
+    setLoading('btn-purchase', true);
+    try {
+      const data = await apiCall('POST', '/payments/purchase', { productId, stripeCustomerId: customerId, billing }, 'result-purchase');
+      showResult('result-purchase', `✓ PaymentIntent créé. Remplis le formulaire ci-dessous.`, 'ok');
+
+      if (paymentElement) paymentElement.unmount();
+      elements = stripe.elements({ clientSecret: data.clientSecret });
+      paymentElement = elements.create('payment');
+      paymentElement.mount('#payment-element');
+      document.getElementById('btn-confirm-pay').classList.remove('hidden');
+    } catch (e) {
+      showResult('result-purchase', '✗ ' + e.message, 'err');
+    } finally { setLoading('btn-purchase', false); }
+  }
+
+  async function confirmPayment() {
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: 'if_required',
+    });
+    if (error) {
+      showResult('result-purchase', '✗ ' + error.message, 'err');
+      toast('Paiement refusé : ' + error.message, 'err');
+    } else {
+      showResult('result-purchase', '✓ Paiement confirmé ! Le webhook va mettre à jour le statut.', 'ok');
+      toast('Paiement confirmé !', 'ok');
+      document.getElementById('btn-confirm-pay').classList.add('hidden');
+      markDone(2);
+    }
+  }
+
+  // ── SUBSCRIPTION ───────────────────────────────────────────────────────
+  async function subscribe() {
+    const customerId = document.getElementById('customer-id').value.trim();
+    if (!customerId) { showResult('result-subscribe', '✗ Crée d\'abord un Customer Stripe (étape 2)', 'err'); return; }
+
+    setLoading('btn-subscribe', true);
+    try {
+      const plan      = document.getElementById('sub-plan').value;
+      const promoCode = document.getElementById('promo-code').value.trim() || undefined;
+      const data = await apiCall('POST', '/payments/subscriptions', { customerId, plan, promoCode }, 'result-subscribe');
+
+      markDone(3);
+
+      if (data.clientSecret) {
+        showResult('result-subscribe', `✓ Abonnement créé (${data.status}). Remplis la carte pour activer.`, 'info');
+        if (subPaymentElement) subPaymentElement.unmount();
+        subElements = stripe.elements({ clientSecret: data.clientSecret });
+        subPaymentElement = subElements.create('payment');
+        subPaymentElement.mount('#sub-payment-element');
+        document.getElementById('btn-confirm-sub').classList.remove('hidden');
+      } else {
+        showResult('result-subscribe', `✓ Abonnement activé en période d'essai (${data.status}). Aucun paiement requis maintenant.`, 'ok');
+        toast('Période d\'essai démarrée !', 'ok');
+      }
+    } catch (e) {
+      showResult('result-subscribe', '✗ ' + e.message, 'err');
+    } finally { setLoading('btn-subscribe', false); }
+  }
+
+  async function confirmSubscription() {
+    const { error } = await stripe.confirmPayment({
+      elements: subElements,
+      confirmParams: { return_url: window.location.href },
+      redirect: 'if_required',
+    });
+    if (error) {
+      showResult('result-subscribe', '✗ ' + error.message, 'err');
+      toast('Paiement refusé : ' + error.message, 'err');
+    } else {
+      showResult('result-subscribe', '✓ Abonnement activé !', 'ok');
+      toast('Abonnement activé !', 'ok');
+      document.getElementById('btn-confirm-sub').classList.add('hidden');
+    }
+  }
+
+  // ── MANAGE SUBSCRIPTION ────────────────────────────────────────────────
+  async function getSubscription() {
+    setLoading('btn-get-sub', true);
+    clearResult('result-getsub');
+    document.getElementById('sub-display').innerHTML = '';
+    try {
+      const data = await apiCall('GET', '/payments/subscriptions/me', null, 'result-getsub');
+      if (!data) { showResult('result-getsub', 'Aucun abonnement trouvé.', 'info'); return; }
+
+      clearResult('result-getsub');
+      const toDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : '—';
+      document.getElementById('sub-display').innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem">
+          <span style="font-weight:600;font-size:1rem">${data.planInterval === 'month' ? 'Plan Mensuel' : 'Plan Annuel'}</span>
+          ${statusBadge(data.status)}
+        </div>
+        <div class="sub-info">
+          <div class="sub-info-item"><label>Début de période</label><span>${toDate(data.currentPeriodStart)}</span></div>
+          <div class="sub-info-item"><label>Fin de période</label><span>${toDate(data.currentPeriodEnd)}</span></div>
+          <div class="sub-info-item"><label>Fin d'essai</label><span>${toDate(data.trialEnd)}</span></div>
+          <div class="sub-info-item"><label>Annulation prévue</label><span>${data.cancelAtPeriodEnd ? '⚠ Oui' : 'Non'}</span></div>
+        </div>
+        <div style="margin-top:.75rem"><label style="font-size:.75rem;color:#64748b">Stripe ID</label><div class="data-box" style="margin-top:.25rem">${data.stripeSubscriptionId ?? '—'}</div></div>`;
+      toast('Abonnement chargé', 'info');
+    } catch (e) {
+      showResult('result-getsub', '✗ ' + e.message, 'err');
+    } finally { setLoading('btn-get-sub', false); }
+  }
+
+  async function changePlan() {
+    try {
+      const plan = document.getElementById('change-plan-select').value;
+      const data = await apiCall('PUT', '/payments/subscriptions/plan', { plan }, 'result-changeplan');
+      showResult('result-changeplan', '✓ ' + data.message, 'ok');
+      toast(data.message, 'ok');
+      await getSubscription();
+    } catch {}
+  }
+
+  async function cancelSub() {
+    if (!confirm('Annuler l\'abonnement à la fin de la période en cours ?')) return;
+    try {
+      const data = await apiCall('POST', '/payments/subscriptions/cancel', null, 'result-cancel');
+      showResult('result-cancel', '✓ ' + data.message, 'ok');
+      toast(data.message, 'ok');
+      await getSubscription();
+    } catch {}
+  }
+
+  // ── INVOICES & HISTORY ────────────────────────────────────────────────
+  async function loadInvoices() {
+    try {
+      const invoices = await apiCall('GET', '/payments/invoices', null, 'result-invoices');
+      const list = document.getElementById('invoices-list');
+      if (!invoices.length) { showResult('result-invoices', 'Aucune facture pour le moment.', 'info'); list.innerHTML = ''; return; }
+      clearResult('result-invoices');
+      list.innerHTML = invoices.map(inv => `
+        <li>
+          <span>${new Date(inv.created).toLocaleDateString('fr-FR')} — ${(inv.amountPaid/100).toFixed(2)} ${inv.currency.toUpperCase()} ${statusBadge(inv.status)}</span>
+          ${inv.invoicePdfUrl ? `<a href="${inv.invoicePdfUrl}" target="_blank">Télécharger PDF</a>` : '<span style="color:#334155;font-size:.75rem">Pas de PDF</span>'}
+        </li>`).join('');
+      toast(`${invoices.length} facture(s) chargée(s)`, 'ok');
+    } catch {}
+  }
+
+  async function loadHistory() {
+    try {
+      const payments = await apiCall('GET', '/payments/history', null, 'result-history');
+      const list = document.getElementById('history-list');
+      if (!payments.length) { showResult('result-history', 'Aucun paiement pour le moment.', 'info'); list.innerHTML = ''; return; }
+      clearResult('result-history');
+      list.innerHTML = payments.map(p => `
+        <li>
+          <span>${new Date(p.createdAt).toLocaleDateString('fr-FR')} — ${(p.amountInCents/100).toFixed(2)} ${p.currency.toUpperCase()}</span>
+          ${statusBadge(p.status)}
+        </li>`).join('');
+      toast(`${payments.length} paiement(s) chargé(s)`, 'ok');
+    } catch {}
+  }
+
+  // ── Init ───────────────────────────────────────────────────────────────
+  window.addEventListener('load', () => {
+    // Vérifie que le serveur répond
+    fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(() => toast('Serveur joignable sur localhost:3000', 'ok', 3000))
+      .catch(() => toast('Serveur inaccessible — lance: npm run start:dev', 'err', 8000));
+  });
+</script>
+</body>
+</html>

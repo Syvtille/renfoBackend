@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ClashChat WebSocket Test</title>
+    <script src="http://localhost:3000/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+        }
+
+        #logs {
+            background: #f4f4f4;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 400px;
+        }
+
+        input,
+        button {
+            padding: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>ClashChat WebSocket Tester</h1>
+    <div id="logs"></div>
+
+    <div class="controls">
+        <input type="text" id="token" placeholder="JWT Token">
+        <input type="text" id="lobbyId" placeholder="Lobby ID">
+        <button id="connectBtn">Connect & Join Lobby</button>
+
+        <input type="text" id="msgContent" placeholder="Message/Reaction">
+        <button id="sendMsgBtn">Send Message</button>
+        <button id="sendReactionBtn">Send Reaction</button>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('token')) document.getElementById('token').value = urlParams.get('token');
+        if (urlParams.has('lobbyId')) document.getElementById('lobbyId').value = urlParams.get('lobbyId');
+
+        const logsDiv = document.getElementById('logs');
+        function log(msg) {
+            logsDiv.textContent += msg + '\n';
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        let socket;
+
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            const token = document.getElementById('token').value;
+            const lobbyId = document.getElementById('lobbyId').value;
+
+            if (!token || !lobbyId) return alert('Need token and lobby ID');
+
+            socket = io('http://localhost:3000', {
+                auth: { token: token }
+            });
+
+            socket.on('connect', () => {
+                log('=> Connected to server');
+                socket.emit('joinLobby', { lobbyId });
+            });
+
+            socket.on('disconnect', () => {
+                log('=> Disconnected from server');
+            });
+
+            socket.on('lobbyHistory', (msgs) => {
+                log('<= lobbyHistory: ' + JSON.stringify(msgs));
+            });
+
+            socket.on('newMessage', (msg) => {
+                log('<= newMessage: ' + JSON.stringify(msg));
+            });
+        });
+
+        document.getElementById('sendMsgBtn').addEventListener('click', () => {
+            const lobbyId = document.getElementById('lobbyId').value;
+            const content = document.getElementById('msgContent').value;
+            if (socket && lobbyId && content) {
+                socket.emit('sendMessage', { lobbyId, content });
+                log('=> sendMessage: ' + content);
+            }
+        });
+
+        document.getElementById('sendReactionBtn').addEventListener('click', () => {
+            const lobbyId = document.getElementById('lobbyId').value;
+            const content = document.getElementById('msgContent').value;
+            if (socket && lobbyId && content) {
+                socket.emit('sendReaction', { lobbyId, content });
+                log('=> sendReaction: ' + content);
+            }
+        });
+    </script>
+</body>
+
+</html>
